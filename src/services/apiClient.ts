@@ -1,0 +1,412 @@
+// API client for frontend
+import axios from 'axios';
+import type { AxiosInstance, AxiosError } from 'axios';
+
+const getApiUrl = () => {
+  // Priority 1: Environment variable from Vite (BEST for production)
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl) {
+    // Ensure the URL ends with /api to match backend routes
+    return envUrl.endsWith('/api') ? envUrl : `${envUrl.replace(/\/$/, '')}/api`;
+  }
+
+  // Priority 2: Known Production Backend (Safe fallback)
+  if (import.meta.env.PROD) {
+    const backendUrl = 'https://pavithra-travels01.onrender.com/api';
+    console.log(`[API_CLIENT] Production mode. Using fallback backend: ${backendUrl}`);
+    return backendUrl;
+  }
+
+  // Priority 3: Local Development
+  return 'http://localhost:10000/api';
+};
+
+const API_URL = getApiUrl();
+
+class ApiClient {
+  private client: AxiosInstance;
+  private token: string | null = null;
+
+  constructor() {
+    this.client = axios.create({
+      baseURL: API_URL,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    // Add request interceptor to include auth token
+    this.client.interceptors.request.use((config) => {
+      if (this.token) {
+        config.headers.Authorization = `Bearer ${this.token}`;
+      }
+      return config;
+    });
+
+    // Add response interceptor for error handling
+    this.client.interceptors.response.use(
+      (response) => response,
+      (error: AxiosError) => {
+        if (error.response?.status === 500) {
+          console.group('🚨 Backend 500 Error Diagnostic');
+          console.error('URL:', error.config?.url);
+          console.error('Data:', error.response?.data);
+          console.groupEnd();
+        }
+        
+        if (error.response?.status === 401) {
+          // Handle unauthorized - clear token but don't auto-redirect
+          localStorage.removeItem('authToken');
+          this.token = null;
+        }
+        return Promise.reject(error);
+      }
+    );
+  }
+
+  setToken(token: string | null) {
+    this.token = token;
+    if (token) {
+      localStorage.setItem('authToken', token);
+    } else {
+      localStorage.removeItem('authToken');
+    }
+  }
+
+  getToken(): string | null {
+    return this.token || localStorage.getItem('authToken');
+  }
+
+  // Authentication endpoints
+  async register(email: string, password: string, displayName: string, phone?: string) {
+    const response = await this.client.post('/auth/register', {
+      email,
+      password,
+      displayName,
+      phone
+    });
+    return response.data;
+  }
+
+  async login(token: string) {
+    const response = await this.client.post('/auth/verify-token', { token });
+    return response.data;
+  }
+
+  async verifyToken(token: string) {
+    const response = await this.client.post('/auth/verify-token', { token });
+    return response.data;
+  }
+
+  async resetPassword(emailOrId: string, newPassword: string) {
+    // If it looks like an email, send as email, otherwise as userId
+    const payload = emailOrId.includes('@') ? { email: emailOrId, newPassword } : { userId: emailOrId, newPassword };
+    const response = await this.client.post('/auth/reset-password', payload);
+    return response.data;
+  }
+
+  async changePassword(currentPassword: string, newPassword: string) {
+    const response = await this.client.post('/auth/change-password', { currentPassword, newPassword });
+    return response.data;
+  }
+
+  // User endpoints
+  async getUserProfile() {
+    const response = await this.client.get('/users/profile');
+    return response.data;
+  }
+
+  async updateUserProfile(updates: any) {
+    const response = await this.client.put('/users/profile', updates);
+    return response.data;
+  }
+
+  async getUser(userId: string) {
+    const response = await this.client.get(`/users/${userId}`);
+    return response.data;
+  }
+
+  // Booking endpoints
+  async createBooking(booking: any) {
+    const response = await this.client.post('/bookings', booking);
+    return response.data;
+  }
+
+  async getBookings() {
+    const response = await this.client.get('/bookings');
+    return response.data;
+  }
+
+  async getMyBookings() {
+    const response = await this.client.get('/bookings/my');
+    return response.data;
+  }
+
+  async getBookingsByPhone(phone: string) {
+    console.log(`[API CLIENT] Fetching bookings for Phone: ${phone}`);
+    const response = await this.client.get(`/bookings/user/${phone}`);
+    return response.data;
+  }
+
+  async getBookingStatus(bookingId: string) {
+    const response = await this.client.get(`/bookings/status/${bookingId}`);
+    return response.data;
+  }
+
+  async updateBookingStatus(bookingId: string, status: string) {
+    const response = await this.client.put(`/bookings/${bookingId}/status`, { status });
+    return response.data;
+  }
+
+  async getAllBookings() {
+    console.log('[API CLIENT] Fetching all bookings for admin');
+    const response = await this.client.get('/bookings');
+    return response.data;
+  }
+
+  async getBooking(bookingId: string) {
+    const response = await this.client.get(`/bookings/${bookingId}`);
+    return response.data;
+  }
+
+  async updateBooking(bookingId: string, updates: any) {
+    const response = await this.client.put(`/bookings/${bookingId}`, updates);
+    return response.data;
+  }
+
+  async cancelBooking(bookingId: string) {
+    const response = await this.client.post(`/bookings/${bookingId}/cancel`);
+    return response.data;
+  }
+
+  // Destination endpoints
+  async getDestinations() {
+    const response = await this.client.get('/destinations');
+    return response.data;
+  }
+
+  async createDestination(data: any) {
+    const response = await this.client.post('/destinations', data);
+    return response.data;
+  }
+
+  async updateDestination(id: string, data: any) {
+    const response = await this.client.put(`/destinations/${id}`, data);
+    return response.data;
+  }
+
+  async deleteDestination(id: string) {
+    const response = await this.client.delete(`/destinations/${id}`);
+    return response.data;
+  }
+
+  async getDestination(destinationId: string) {
+    const response = await this.client.get(`/destinations/${destinationId}`);
+    return response.data;
+  }
+
+  async getDestinationsByCategory(category: string) {
+    const response = await this.client.get(`/destinations/category/${category}`);
+    return response.data;
+  }
+
+  async getDestinationsByRegion(region: string) {
+    const response = await this.client.get(`/destinations/region/${region}`);
+    return response.data;
+  }
+
+  async filterDestinations(filters: any) {
+    const response = await this.client.post('/destinations/filter', filters);
+    return response.data;
+  }
+
+  // Reviews endpoints
+  async getReviews(destinationId: string) {
+    const response = await this.client.get(`/reviews/${destinationId}`);
+    return response.data;
+  }
+
+  async createReview(reviewData: any) {
+    const response = await this.client.post('/reviews', reviewData);
+    return response.data;
+  }
+
+  async deleteReview(reviewId: string) {
+    const response = await this.client.delete(`/reviews/${reviewId}`);
+    return response.data;
+  }
+
+  // Chatbot endpoints
+  async getOrCreateConversation(conversationId?: string, userId?: string) {
+    const params = new URLSearchParams();
+    if (conversationId) params.append('conversationId', conversationId);
+    if (userId) params.append('userId', userId);
+
+    const response = await this.client.get(`/chatbot/conversation?${params}`);
+    return response.data;
+  }
+
+  async getUserConversations() {
+    const response = await this.client.get('/chatbot/conversations');
+    return response.data;
+  }
+
+  async sendChatMessage(message: string, conversationId?: string, userId?: string) {
+    const response = await this.client.post('/chatbot/message', {
+      message,
+      conversationId,
+      userId,
+    });
+    return response.data;
+  }
+
+  async archiveConversation(conversationId: string) {
+    const response = await this.client.post(`/chatbot/conversation/${conversationId}/archive`);
+    return response.data;
+  }
+
+  // Admin endpoints
+  async getWhatsAppStatus() {
+    const response = await this.client.get('/admin/whatsapp/status');
+    return response.data;
+  }
+
+  async sendTestWhatsApp(to: string, message: string) {
+    const response = await this.client.post('/admin/whatsapp/test', { to, message });
+    return response.data;
+  }
+
+  // Image / Unsplash endpoints
+  async searchUnsplashImages(query: string, page: number = 1, perPage: number = 20) {
+    const response = await this.client.get('/images/unsplash/search', {
+      params: { query, page, perPage }
+    });
+    return response.data;
+  }
+
+  async triggerUnsplashDownload(downloadLocation: string) {
+    const response = await this.client.post('/images/unsplash/trigger-download', { downloadLocation });
+    return response.data;
+  }
+
+  // Travel Posts endpoints
+  async getPosts() {
+    const response = await this.client.get('/posts');
+    return response.data;
+  }
+
+  async getPost(id: string) {
+    const response = await this.client.get(`/posts/${id}`);
+    return response.data;
+  }
+
+  async createPost(formData: FormData) {
+    const response = await this.client.post('/posts', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  }
+
+  async updatePost(id: string, formData: FormData) {
+    const response = await this.client.put(`/posts/${id}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  }
+
+  // JSON-based methods (images already uploaded to Firebase Storage)
+  async createPostJson(postData: { title: string; description: string; location: string; imageUrl: string; images?: string[] }) {
+    const response = await this.client.post('/posts', postData);
+    return response.data;
+  }
+
+  async updatePostJson(id: string, postData: { title: string; description: string; location: string; imageUrl: string; images?: string[] }) {
+    const response = await this.client.put(`/posts/${id}`, postData);
+    return response.data;
+  }
+
+  async deletePost(id: string) {
+    const response = await this.client.delete(`/posts/${id}`);
+    return response.data;
+  }
+
+  async uploadImage(formData: FormData) {
+    const response = await this.client.post('/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: () => {
+        // This can be used if we want progress tracking from Axios
+      },
+    });
+    return response.data;
+  }
+
+  async addPostReview(reviewData: { postId: string; username: string; message: string }) {
+    const response = await this.client.post('/posts/reviews', reviewData);
+    return response.data;
+  }
+
+  // Blog endpoints
+  async getBlogs() {
+    const response = await this.client.get('/blogs');
+    return response.data;
+  }
+
+  async getBlog(id: string) {
+    const response = await this.client.get(`/blogs/${id}`);
+    return response.data;
+  }
+
+  async createBlog(blogData: any) {
+    const response = await this.client.post('/blogs', blogData);
+    return response.data;
+  }
+
+  async updateBlog(id: string, blogData: any) {
+    const response = await this.client.put(`/blogs/${id}`, blogData);
+    return response.data;
+  }
+
+  async deleteBlog(id: string) {
+    const response = await this.client.delete(`/blogs/${id}`);
+    return response.data;
+  }
+
+  async toggleBlogLike(id: string) {
+    const response = await this.client.post(`/blogs/${id}/like`);
+    return response.data;
+  }
+
+  async getBlogComments(id: string) {
+    const response = await this.client.get(`/blogs/${id}/comments`);
+    return response.data;
+  }
+
+  async addBlogComment(id: string, commentData: { message: string }) {
+    const response = await this.client.post(`/blogs/${id}/comments`, commentData);
+    return response.data;
+  }
+
+  async uploadBlogMedia(formData: FormData) {
+    const response = await this.client.post('/blogs/upload-media', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  }
+
+  // Health check
+  async healthCheck() {
+    const response = await this.client.get('/health');
+    return response.data;
+  }
+
+  async dbHealthCheck() {
+    const response = await this.client.get('/health/db');
+    return response.data;
+  }
+}
+
+export const apiClient = new ApiClient();
