@@ -9,7 +9,7 @@ import { VideoSection } from "../components/VideoSection";
 import { TravelPostsSection } from "../components/TravelPostsSection";
 
 // Importing the local video asset
-import aboutVideo from "../../assets/about.mp4";
+const aboutVideo = "";
 
 export function Home() {
   return (
